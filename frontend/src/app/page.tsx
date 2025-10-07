@@ -1,12 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import type { GenerateResponse, UploadResponse } from "../types/api";
-
-interface Flashcard {
-  question: string;
-  answer: string;
-}
+import { motion } from "framer-motion";
+import type { GenerateResponse, UploadResponse, Flashcard } from "../types/api";
+import FlashcardsView from "../components/FlashcardsView";
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -15,7 +12,6 @@ export default function Home() {
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [uploadInfo, setUploadInfo] = useState<UploadResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [flippedCards, setFlippedCards] = useState<Set<number>>(new Set());
 
   async function handleUpload() {
     setError(null);
@@ -44,7 +40,6 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setFlashcards([]);
-    setFlippedCards(new Set());
     
     try {
       const res = await fetch("http://localhost:8000/generate", {
@@ -54,7 +49,16 @@ export default function Home() {
       });
       const data = (await res.json()) as GenerateResponse | { error?: string };
       if ("error" in data && data.error) throw new Error(data.error);
-      setFlashcards((data as GenerateResponse).flashcards || []);
+      
+      // Convert FlashcardItem[] to Flashcard[] with unique IDs
+      const generatedCards = (data as GenerateResponse).flashcards || [];
+      const cardsWithIds: Flashcard[] = generatedCards.map((card, index) => ({
+        id: `card-${Date.now()}-${index}`,
+        question: card.question,
+        answer: card.answer,
+      }));
+      
+      setFlashcards(cardsWithIds);
     } catch (e: any) {
       setError(e.message || "Generation failed");
     } finally {
@@ -62,15 +66,22 @@ export default function Home() {
     }
   }
 
-  const toggleCard = (index: number) => {
-    setFlippedCards(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(index)) {
-        newSet.delete(index);
-      } else {
-        newSet.add(index);
-      }
-      return newSet;
+  const handleUpdateFlashcard = (id: string, question: string, answer: string) => {
+    setFlashcards(prev => prev.map(card => 
+      card.id === id ? { ...card, question, answer } : card
+    ));
+  };
+
+  const handleDeleteFlashcard = (id: string) => {
+    setFlashcards(prev => prev.filter(card => card.id !== id));
+  };
+
+  const handleReorderFlashcards = (fromIndex: number, toIndex: number) => {
+    setFlashcards(prev => {
+      const newCards = [...prev];
+      const [movedCard] = newCards.splice(fromIndex, 1);
+      newCards.splice(toIndex, 0, movedCard);
+      return newCards;
     });
   };
 
@@ -156,76 +167,18 @@ export default function Home() {
         </div>
 
         {/* Flashcards Display */}
-        {flashcards.length > 0 && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2">
-                Your Flashcards
-              </h2>
-              <p className="text-gray-600 dark:text-gray-400">
-                Click on any card to reveal the answer
-              </p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {flashcards.map((card, index) => (
-                <div
-                  key={index}
-                  className="group cursor-pointer"
-                  onClick={() => toggleCard(index)}
-                >
-                  <div className="relative h-64 w-full perspective-1000">
-                    <div
-                      className={`relative w-full h-full transition-transform duration-700 transform-style-preserve-3d ${
-                        flippedCards.has(index) ? "rotate-y-180" : ""
-                      }`}
-                    >
-                      {/* Front of card */}
-                      <div className="absolute inset-0 w-full h-full backface-hidden bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 p-6 flex flex-col justify-center">
-                        <div className="text-center">
-                          <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-2xl">❓</span>
-                          </div>
-                          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                            Question
-                          </h3>
-                          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                            {card.question}
-                          </p>
-                        </div>
-                        <div className="mt-auto text-center">
-                          <span className="text-sm text-blue-600 dark:text-blue-400 font-medium">
-                            Click to reveal answer
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Back of card */}
-                      <div className="absolute inset-0 w-full h-full backface-hidden bg-gradient-to-br from-green-50 to-emerald-50 dark:from-gray-800 dark:to-gray-700 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-600 p-6 flex flex-col justify-center rotate-y-180">
-                        <div className="text-center">
-                          <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <span className="text-2xl">💡</span>
-                          </div>
-                          <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                            Answer
-                          </h3>
-                          <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                            {card.answer}
-                          </p>
-                        </div>
-                        <div className="mt-auto text-center">
-                          <span className="text-sm text-green-600 dark:text-green-400 font-medium">
-                            Click to flip back
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <FlashcardsView
+            flashcards={flashcards}
+            onUpdate={handleUpdateFlashcard}
+            onDelete={handleDeleteFlashcard}
+            onReorder={handleReorderFlashcards}
+          />
+        </motion.div>
       </div>
     </div>
   );

@@ -1,3 +1,9 @@
+export interface Flashcard {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface FlashcardItem {
   question: string;
   answer: string;
@@ -11,6 +17,19 @@ export interface GenerateResponse {
 export interface UploadResponse {
   extracted_text: string;
   chunks: string[];
+}
+
+export interface FlashcardEditorProps {
+  flashcard: Flashcard;
+  onSave: (id: string, question: string, answer: string) => void;
+  onCancel: () => void;
+}
+
+export interface FlashcardsViewProps {
+  flashcards: Flashcard[];
+  onUpdate: (id: string, question: string, answer: string) => void;
+  onDelete: (id: string) => void;
+  onReorder: (fromIndex: number, toIndex: number) => void;
 }
 
 
