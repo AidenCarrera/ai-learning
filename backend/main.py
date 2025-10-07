@@ -1,14 +1,20 @@
+from dotenv import load_dotenv
+load_dotenv()  # loads environment variables from .env
+
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Literal, List, Optional
+from typing import Literal, Optional
+import os
+import json
+import re
 
+from ollama import Client  # Ollama cloud client
 from utils import chunk_text
 
-
+# ---- FastAPI setup ----
 app = FastAPI(title="AI-Learning API", version="0.1.0")
 
-# CORS for local frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -17,56 +23,71 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# ---- Request model ----
 class GenerateRequest(BaseModel):
     text: str
     mode: Literal["flashcards", "quiz", "test"]
 
-
+# ---- Upload endpoint ----
 @app.post("/upload")
 async def upload(file: Optional[UploadFile] = File(default=None), text: Optional[str] = Form(default=None)):
-    """
-    Accepts a PDF file or raw text and returns placeholder extracted text.
-    This is a minimal stub – no real PDF parsing.
-    """
     if file is None and (text is None or text.strip() == ""):
         return {"error": "Provide a PDF in 'file' or text in 'text'"}
 
     if file is not None:
-        # Just read a small chunk to simulate processing (no parsing)
         content = await file.read()
         size = len(content) if content else 0
         extracted = f"[Mock PDF text] {file.filename} with ~{size} bytes"
     else:
         extracted = text or ""
 
-    # Placeholder use of chunking util
     chunks = chunk_text(extracted)
     return {"extracted_text": extracted, "chunks": chunks}
 
-
+# ---- Generate endpoint ----
 @app.post("/generate")
 async def generate(req: GenerateRequest):
-    """
-    Returns mock structured JSON for flashcards, quiz, or test.
-    """
-    base_flashcards = [
-        {"question": "What is AI?", "answer": "Artificial Intelligence"},
-        {"question": "What is ML?", "answer": "Machine Learning"},
-    ]
-    base_quiz = [
-        {"question": "Which is true about AI?", "options": ["A", "B", "C", "D"], "correct_index": 1},
-        {"question": "AI is used for?", "options": ["Cooking", "Games", "Sleeping", "None"], "correct_index": 1},
-    ]
-    base_test = [
-        {"question": "Explain machine learning.", "answer": "ML is a subset of AI that learns from data."},
-        {"question": "Define supervised learning.", "answer": "Learning from labeled data to predict outputs."},
-    ]
+    if req.mode != "flashcards":
+        return {"error": "Only flashcards mode is supported for now"}
 
-    response = {
-        "flashcards": base_flashcards if req.mode == "flashcards" else base_flashcards[:1],
-        "quiz": base_quiz if req.mode == "quiz" else base_quiz[:1],
-        "test": base_test if req.mode == "test" else base_test[:1],
-        "summary": f"Generated {req.mode} from {len(req.text)} characters",
+    flashcards = generate_flashcards_with_ollama(req.text, num_cards=5)
+    return {
+        "flashcards": flashcards,
+        "summary": f"Generated {len(flashcards)} flashcards from {len(req.text)} characters"
     }
-    return response
+
+# ---- Ollama integration ----
+def generate_flashcards_with_ollama(text: str, num_cards: int = 5):
+    """
+    Calls Ollama cloud to generate flashcards from text.
+    Handles JSON returned in Markdown code blocks.
+    """
+    # Initialize Ollama client pointing at cloud
+    client = Client(
+        host="https://ollama.com",
+        headers={"Authorization": f"Bearer {os.environ.get('OLLAMA_API_KEY')}"}
+    )
+
+    prompt = f"""
+    Generate {num_cards} educational flashcards from the following text.
+    Format the output as JSON with "question" and "answer" fields:
+
+    {text}
+    """
+    messages = [{"role": "user", "content": prompt}]
+
+    # Stream the response
+    response_text = ""
+    for part in client.chat("gpt-oss:120b-cloud", messages=messages, stream=True):
+        response_text += part["message"]["content"]
+
+    # Strip ```json and ``` markers if present
+    cleaned_text = re.sub(r"```(?:json)?\n?", "", response_text).replace("```", "").strip()
+
+    # Parse JSON safely
+    try:
+        flashcards = json.loads(cleaned_text)
+        return flashcards
+    except Exception as e:
+        print("JSON parsing failed:", e)
+        return [{"question": "Parsing failed", "answer": response_text}]
