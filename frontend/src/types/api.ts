@@ -14,9 +14,16 @@ export interface GenerateResponse {
   summary?: string;
 }
 
+export interface FileInfo {
+  filename: string | null;
+  size: number;
+  processed: boolean;
+}
+
 export interface UploadResponse {
   extracted_text: string;
   chunks: string[];
+  file_info?: FileInfo;
 }
 
 export interface FlashcardEditorProps {

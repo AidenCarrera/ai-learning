@@ -10,7 +10,7 @@ import json
 import re
 
 from ollama import Client  # Ollama cloud client
-from utils import chunk_text
+from utils import chunk_text, process_pdf_content
 
 # ---- FastAPI setup ----
 app = FastAPI(title="AI-Learning API", version="0.1.0")
@@ -35,14 +35,40 @@ async def upload(file: Optional[UploadFile] = File(default=None), text: Optional
         return {"error": "Provide a PDF in 'file' or text in 'text'"}
 
     if file is not None:
+        # Validate file type
+        if not file.filename.lower().endswith('.pdf'):
+            return {"error": "Only PDF files are supported"}
+        
+        # Validate file size (10MB limit)
         content = await file.read()
-        size = len(content) if content else 0
-        extracted = f"[Mock PDF text] {file.filename} with ~{size} bytes"
+        if len(content) > 10 * 1024 * 1024:  # 10MB
+            return {"error": "File size too large. Maximum size is 10MB"}
+        
+        if len(content) == 0:
+            return {"error": "Uploaded file is empty"}
+        
+        try:
+            # Process PDF with real text extraction
+            extracted = process_pdf_content(content)
+            
+            if not extracted.strip():
+                return {"error": "No text could be extracted from the PDF. The file might be image-based or corrupted."}
+                
+        except Exception as e:
+            return {"error": f"Failed to process PDF: {str(e)}"}
     else:
         extracted = text or ""
 
     chunks = chunk_text(extracted)
-    return {"extracted_text": extracted, "chunks": chunks}
+    return {
+        "extracted_text": extracted, 
+        "chunks": chunks,
+        "file_info": {
+            "filename": file.filename if file else None,
+            "size": len(content) if file else len(extracted),
+            "processed": True
+        } if file else None
+    }
 
 # ---- Generate endpoint ----
 @app.post("/generate")
