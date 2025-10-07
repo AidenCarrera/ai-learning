@@ -1,103 +1,188 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import type { GenerateResponse, GenerationMode, UploadResponse } from "../types/api";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [mode, setMode] = useState<GenerationMode>("flashcards");
+  const [text, setText] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [uploadInfo, setUploadInfo] = useState<UploadResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  async function handleUpload() {
+    setError(null);
+    setUploadInfo(null);
+    try {
+      const form = new FormData();
+      if (file) form.append("file", file);
+      if (text.trim()) form.append("text", text.trim());
+      const res = await fetch("http://localhost:8000/upload", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json()) as UploadResponse | { error?: string };
+      if ("error" in data && data.error) throw new Error(data.error);
+      setUploadInfo(data as UploadResponse);
+      if (!text && (data as UploadResponse).extracted_text) {
+        setText((data as UploadResponse).extracted_text);
+      }
+    } catch (e: any) {
+      setError(e.message || "Upload failed");
+    }
+  }
+
+  async function handleGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await fetch("http://localhost:8000/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, mode }),
+      });
+      const data = (await res.json()) as GenerateResponse;
+      setResult(data);
+    } catch (e: any) {
+      setError(e.message || "Generation failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="min-h-screen p-6 sm:p-10">
+      <div className="max-w-3xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-4">AI-Learning</h1>
+        <p className="text-sm text-foreground/70 mb-6">
+          Convert PDFs or text into flashcards, quizzes, and tests (mock demo).
+        </p>
+
+        <form onSubmit={handleGenerate} className="space-y-4">
+          <div className="grid gap-3">
+            <label className="text-sm font-medium">Upload PDF (optional)</label>
+            <input
+              className="block w-full rounded border border-black/10 dark:border-white/15 p-2 bg-transparent"
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+            <button
+              type="button"
+              onClick={handleUpload}
+              className="inline-flex w-fit items-center gap-2 rounded bg-foreground text-background px-3 py-2 text-sm hover:opacity-90"
+            >
+              Upload to Extract Text
+            </button>
+            {uploadInfo && (
+              <div className="text-xs text-foreground/70">
+                Extracted {uploadInfo.extracted_text.length} chars • {uploadInfo.chunks.length} chunk(s)
+              </div>
+            )}
+          </div>
+
+          <div className="grid gap-3">
+            <label className="text-sm font-medium">Or paste text</label>
+            <textarea
+              className="min-h-[160px] rounded border border-black/10 dark:border-white/15 p-3 bg-transparent"
+              placeholder="Paste text here..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <label className="text-sm font-medium">Mode</label>
+            <div className="flex gap-2">
+              {["flashcards", "quiz", "test"].map((m) => (
+                <button
+                  type="button"
+                  key={m}
+                  onClick={() => setMode(m as GenerationMode)}
+                  className={`px-3 py-1.5 rounded border text-sm ${
+                    mode === m
+                      ? "bg-foreground text-background border-transparent"
+                      : "border-black/10 dark:border-white/15"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="submit"
+              className="inline-flex items-center gap-2 rounded bg-foreground text-background px-4 py-2 text-sm hover:opacity-90"
+              disabled={loading}
+            >
+              {loading ? "Generating..." : "Generate"}
+            </button>
+            {error && <span className="text-sm text-red-600">{error}</span>}
+          </div>
+        </form>
+
+        {result && (
+          <div className="mt-8 grid gap-6">
+            {result.flashcards?.length > 0 && (
+              <section>
+                <h2 className="font-medium mb-2">Flashcards</h2>
+                <div className="grid gap-2">
+                  {result.flashcards.map((fc, idx) => (
+                    <div key={idx} className="rounded border border-black/10 dark:border-white/15 p-3">
+                      <div className="font-semibold">Q: {fc.question}</div>
+                      <div className="text-sm">A: {fc.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {result.quiz?.length > 0 && (
+              <section>
+                <h2 className="font-medium mb-2">Quiz</h2>
+                <div className="grid gap-3">
+                  {result.quiz.map((q, idx) => (
+                    <div key={idx} className="rounded border border-black/10 dark:border-white/15 p-3">
+                      <div className="font-semibold">{q.question}</div>
+                      <ul className="mt-2 list-disc pl-5 text-sm">
+                        {q.options.map((opt, i) => (
+                          <li key={i} className={i === q.correct_index ? "font-semibold" : ""}>
+                            {opt}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {result.test?.length > 0 && (
+              <section>
+                <h2 className="font-medium mb-2">Short Test</h2>
+                <div className="grid gap-2">
+                  {result.test.map((t, idx) => (
+                    <div key={idx} className="rounded border border-black/10 dark:border-white/15 p-3">
+                      <div className="font-semibold">Q: {t.question}</div>
+                      <div className="text-sm">A: {t.answer}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {result.summary && (
+              <p className="text-xs text-foreground/60">{result.summary}</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
