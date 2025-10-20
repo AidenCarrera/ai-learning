@@ -1,0 +1,94 @@
+Chapter 10 :: Data Abstraction
+and Object Orientation
+Programming Language Pragmatics, Fourth Edition
+Michael L. Scott
+Copyright © 2016 Elsevier
+Object-Oriented Programming
+• Control or PROCESS abstraction is a very old
+idea (subroutines!), though few languages
+provide it in a truly general form (Scheme
+comes close)
+• Data abstraction is somewhat newer, though its
+roots can be found in Simula67
+– An Abstract Data Type is one that is defined in
+terms of the operations that it supports (i.e., that
+can be performed upon it) rather than in terms of its
+structure or implementation
+Object-Oriented Programming
+• Why abstractions?
+– easier to think about - hide what doesn't matter to
+programmer
+– protection - prevent access to things you shouldn't see
+– plug compatibility
+• replacement of pieces, often without recompilation,
+definitely without rewriting libraries
+• division of labor in software projects
+Object-Oriented Programming
+•We talked about data abstraction some back in the
+unit on naming and scoping (Ch. 3)
+•Recall that we traced the historical development
+of abstraction mechanisms
+–Static set of variables Basic
+–Locals Fortran
+–Statics Fortran, Algol 60, C
+–Modules Modula-2, Ada 83
+–Module types Euclid
+–Objects Smalltalk, C++, Eiffel, Java
+Oberon, Modula-3, Ada 95
+Object-Oriented Programming
+• Statics allow a subroutine to retain values
+from one invocation to the next, while
+hiding the name in-between
+• Modules allow a collection of subroutines
+to share some statics, still with hiding
+– If you want to build an abstract data type,
+though, you have to make the module a
+manager
+Object-Oriented Programming
+• Module types allow the module to be the
+abstract data type - you can declare
+a bunch of them
+– This is generally more intuitive
+• It avoids explicit object parameters to many
+operations
+• One minor drawback: If you have an operation
+that needs to look at the innards of two different
+types, you'd define both types in the same manager
+module in Modula-2
+• In C++ you need to make one of the classes (or
+some of its members) "friends" of the other class
+Object-Oriented Programming
+• Objects add inheritance and dynamic
+method binding
+• Simula 67 introduced these, but didn't have
+data hiding
+• The 3 key factors in OO programming
+– Encapsulation (data hiding)
+– Inheritance
+– Dynamic method binding
+Encapsulation and Inheritance
+• Visibility rules
+– Public and Private parts of an object
+declaration/definition
+– 2 reasons to put things in the declaration
+• so programmers can get at them
+• so the compiler can understand them
+– At the very least the compiler needs to know
+the size of an object, even though the
+programmer isn't allowed to get at many or
+most of the fields (members) that contribute to
+that size
+• That's why private fields must be in declaration
+Encapsulation and Inheritance
+Classes (C++)
+• C++ distinguishes among
+–public class members
+•accessible to anybody
+–protected class members
+•accessible to members of this or derived classes
+–private
+•accessible just to members of this class
+• A C++ structure (struct) is simply a class whose
+members are public by default
+• C++ base classes can also be public, private, or
+protected
