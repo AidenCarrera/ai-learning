@@ -5,46 +5,34 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from typing import Literal, Optional, List
-import os
 import json
 import re
 import logging
 
 from ollama import Client
 from utils import chunk_text, process_pdf_content
+from config import settings, print_config_summary
 
 # ---- Logging Configuration ----
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=getattr(logging, settings.LOG_LEVEL),
+    format=settings.LOG_FORMAT
 )
 logger = logging.getLogger(__name__)
 
-# ---- Environment Variable Validation ----
-OLLAMA_API_KEY = os.getenv('OLLAMA_API_KEY')
-if not OLLAMA_API_KEY:
-    raise RuntimeError("OLLAMA_API_KEY environment variable is required. Please set it in your .env file.")
-
-# ---- Configuration Constants ----
-MAX_FILE_SIZE_MB = 10
-MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
-MAX_TEXT_LENGTH = 500_000  # 500KB of text
-DEFAULT_FLASHCARD_COUNT = 5
-OLLAMA_MODEL = "gpt-oss:120b-cloud"
-
 # ---- FastAPI Setup ----
 app = FastAPI(
-    title="AI-Learning API",
-    version="0.1.0",
-    description="Generate flashcards from PDFs or text using AI"
+    title=settings.API_TITLE,
+    version=settings.API_VERSION,
+    description=settings.API_DESCRIPTION
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=settings.CORS_CREDENTIALS,
+    allow_methods=settings.CORS_METHODS,
+    allow_headers=settings.CORS_HEADERS,
 )
 
 # ---- Pydantic Models ----
@@ -64,20 +52,20 @@ class GenerateRequest(BaseModel):
     """Request model for flashcard generation"""
     text: str
     mode: Literal["flashcards", "quiz", "test"]
-    num_cards: Optional[int] = DEFAULT_FLASHCARD_COUNT
+    num_cards: Optional[int] = settings.DEFAULT_FLASHCARD_COUNT
     
     @field_validator('text')
     def validate_text(cls, v):
         if not v or not v.strip():
             raise ValueError("Text cannot be empty")
-        if len(v) > MAX_TEXT_LENGTH:
-            raise ValueError(f"Text too large. Maximum size is {MAX_TEXT_LENGTH} characters (~500KB)")
+        if len(v) > settings.MAX_TEXT_LENGTH:
+            raise ValueError(f"Text too large. Maximum size is {settings.MAX_TEXT_LENGTH} characters (~500KB)")
         return v.strip()
     
     @field_validator('num_cards')
     def validate_num_cards(cls, v):
-        if v is not None and (v < 1 or v > 20):
-            raise ValueError("Number of cards must be between 1 and 20")
+        if v is not None and (v < settings.MIN_FLASHCARD_COUNT or v > settings.MAX_FLASHCARD_COUNT):
+            raise ValueError(f"Number of cards must be between {settings.MIN_FLASHCARD_COUNT} and {settings.MAX_FLASHCARD_COUNT}")
         return v
 
 
@@ -109,8 +97,8 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "version": "0.1.0",
-        "ollama_configured": bool(OLLAMA_API_KEY)
+        "version": settings.API_VERSION,
+        "ollama_configured": bool(settings.OLLAMA_API_KEY)
     }
 
 
@@ -123,8 +111,8 @@ async def upload(
     """
     Upload a PDF file or provide text directly for processing.
     
-    - **file**: PDF file to extract text from (max 10MB)
-    - **text**: Direct text input (max 500KB)
+    - **file**: PDF file to extract text from (max configurable MB)
+    - **text**: Direct text input (max configurable characters)
     
     Returns extracted text split into manageable chunks.
     """
@@ -143,10 +131,10 @@ async def upload(
     # Process file upload
     if file is not None:
         # Validate file type
-        if not file.filename.lower().endswith('.pdf'):
+        if not any(file.filename.lower().endswith(ext) for ext in settings.ALLOWED_FILE_TYPES):
             raise HTTPException(
                 status_code=400,
-                detail="Only PDF files are supported. Please upload a .pdf file."
+                detail=f"Only {', '.join(settings.ALLOWED_FILE_TYPES)} files are supported"
             )
         
         # Read file content
@@ -160,10 +148,10 @@ async def upload(
             )
         
         # Validate file size
-        if len(content) > MAX_FILE_SIZE_BYTES:
+        if len(content) > settings.max_file_size_bytes:
             raise HTTPException(
                 status_code=413,
-                detail=f"File size exceeds {MAX_FILE_SIZE_MB}MB limit"
+                detail=f"File size exceeds {settings.MAX_FILE_SIZE_MB}MB limit"
             )
         
         if len(content) == 0:
@@ -201,15 +189,15 @@ async def upload(
         extracted_text = text.strip()
         
         # Validate text length
-        if len(extracted_text) > MAX_TEXT_LENGTH:
+        if len(extracted_text) > settings.MAX_TEXT_LENGTH:
             raise HTTPException(
                 status_code=413,
-                detail=f"Text exceeds {MAX_TEXT_LENGTH} character limit (~500KB)"
+                detail=f"Text exceeds {settings.MAX_TEXT_LENGTH} character limit (~500KB)"
             )
     
     # Chunk the text
     try:
-        chunks = chunk_text(extracted_text)
+        chunks = chunk_text(extracted_text, max_chars=settings.CHUNK_SIZE_CHARS)
         logger.info(f"Text split into {len(chunks)} chunks")
     except Exception as e:
         logger.error(f"Text chunking failed: {str(e)}")
@@ -231,9 +219,9 @@ async def generate(req: GenerateRequest):
     """
     Generate flashcards, quizzes, or tests from provided text.
     
-    - **text**: Source text for generation (max 500KB)
+    - **text**: Source text for generation (max configurable characters)
     - **mode**: Type of content to generate (currently only "flashcards" supported)
-    - **num_cards**: Number of flashcards to generate (1-20, default 5)
+    - **num_cards**: Number of flashcards to generate (configurable range)
     
     Returns a list of generated flashcards with questions and answers.
     """
@@ -250,7 +238,7 @@ async def generate(req: GenerateRequest):
     try:
         flashcards = generate_flashcards_with_ollama(
             req.text,
-            num_cards=req.num_cards or DEFAULT_FLASHCARD_COUNT
+            num_cards=req.num_cards or settings.DEFAULT_FLASHCARD_COUNT
         )
         logger.info(f"Successfully generated {len(flashcards)} flashcards")
     except ValueError as e:
@@ -273,7 +261,7 @@ async def generate(req: GenerateRequest):
 
 
 # ---- Ollama Integration ----
-def generate_flashcards_with_ollama(text: str, num_cards: int = DEFAULT_FLASHCARD_COUNT) -> List[Flashcard]:
+def generate_flashcards_with_ollama(text: str, num_cards: int = None) -> List[Flashcard]:
     """
     Generate flashcards using Ollama cloud API.
     
@@ -287,11 +275,14 @@ def generate_flashcards_with_ollama(text: str, num_cards: int = DEFAULT_FLASHCAR
     Raises:
         ValueError: If response cannot be parsed into valid flashcards
     """
+    if num_cards is None:
+        num_cards = settings.DEFAULT_FLASHCARD_COUNT
+        
     try:
         # Initialize Ollama client
         client = Client(
-            host="https://ollama.com",
-            headers={"Authorization": f"Bearer {OLLAMA_API_KEY}"}
+            host=settings.OLLAMA_HOST,
+            headers=settings.ollama_headers
         )
         
         # Create prompt
@@ -316,7 +307,7 @@ Text to analyze:
         # Stream response from Ollama
         response_text = ""
         try:
-            for part in client.chat(OLLAMA_MODEL, messages=messages, stream=True):
+            for part in client.chat(settings.OLLAMA_MODEL, messages=messages, stream=True):
                 response_text += part["message"]["content"]
         except Exception as e:
             logger.error(f"Ollama API call failed: {str(e)}")
@@ -409,14 +400,9 @@ def parse_flashcard_response(response_text: str) -> List[Flashcard]:
     return flashcards
 
 
-# ---- Error Handler for Startup ----
+# ---- Startup Event ----
 @app.on_event("startup")
 async def startup_event():
     """Log startup information"""
-    logger.info("=" * 60)
-    logger.info("AI-Learning API Starting Up")
-    logger.info(f"Version: 0.1.0")
-    logger.info(f"Ollama API Key: {'✓ Configured' if OLLAMA_API_KEY else '✗ Missing'}")
-    logger.info(f"Max File Size: {MAX_FILE_SIZE_MB}MB")
-    logger.info(f"Max Text Length: {MAX_TEXT_LENGTH} chars")
-    logger.info("=" * 60)
+    print_config_summary()
+    logger.info("API startup complete - ready to accept requests")
