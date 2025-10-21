@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Flashcard, FlashcardsViewProps } from "../types/api";
+import type { FlashcardsViewProps } from "../../types/api";
 import FlashcardEditor from "./FlashcardEditor";
 
-export default function FlashcardsView({ flashcards, onUpdate, onDelete, onReorder }: FlashcardsViewProps) {
+export default function FlashcardsView({ flashcards, onUpdate, onDelete, }: FlashcardsViewProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
 

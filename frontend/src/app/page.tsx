@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import type { Flashcard, GenerateResponse, UploadResponse } from "../types/api";
-import UploadSection from "../components/UploadSection";
-import FlashcardsView from "../components/FlashcardsView";
-import GenerateButton from "../components/GenerateButton";
+import type { Flashcard, UploadResponse } from "@/types/api";
+import UploadSection from "@/components/upload/UploadSection";
+import FlashcardsView from "@/components/flashcards/FlashcardsView";
+import GenerateButton from "@/components/GenerateButton";
+import { flashcardAPI } from "@/services/api";
+import { APIError } from "@/lib/fetcher";
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -22,31 +24,27 @@ export default function Home() {
     setFlashcards([]);
 
     try {
-      const res = await fetch("http://localhost:8000/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, mode: "flashcards" }),
-      });
+      // Use the new API service
+      const data = await flashcardAPI.generate(text);
 
-      const data = (await res.json()) as GenerateResponse | { error?: string };
-      if ("error" in data && data.error) throw new Error(data.error);
-
-      const generatedCards = (data as GenerateResponse).flashcards || [];
-      const cardsWithIds: Flashcard[] = generatedCards.map((card, index) => ({
+      // Transform API response to include client-side IDs
+      const cardsWithIds: Flashcard[] = data.flashcards.map((card, index) => ({
         id: `card-${Date.now()}-${index}`,
         question: card.question,
         answer: card.answer,
       }));
 
       setFlashcards(cardsWithIds);
-    } catch (e: unknown) {
-      if (e instanceof Error) {
-        setError(e.message);
+    } catch (error) {
+      // Handle APIError with proper typing
+      if (error instanceof APIError) {
+        setError(error.message);
+      } else if (error instanceof Error) {
+        setError(error.message);
       } else {
-        setError("Generation failed");
+        setError("Failed to generate flashcards. Please try again.");
       }
-    }
-    finally {
+    } finally {
       setLoading(false);
     }
   };

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import type { FlashcardEditorProps } from "../types/api";
+import type { FlashcardEditorProps } from "../../types/api";
 
 export default function FlashcardEditor({ flashcard, onSave, onCancel }: FlashcardEditorProps) {
   const [question, setQuestion] = useState(flashcard.question);
