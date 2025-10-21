@@ -11,6 +11,8 @@ from models import (
     GenerateRequest,
     UploadResponse,
     GenerateResponse,
+    QuizResponse,
+    TestResponse,
     HealthResponse,
 )
 from services.pdf_service import PDFService

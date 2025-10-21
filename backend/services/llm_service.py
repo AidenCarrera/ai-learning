@@ -11,7 +11,7 @@ import logging
 from ollama import Client
 
 from config import settings
-from models import Flashcard
+from models import Flashcard, MultipleChoiceQuestion, TrueFalseQuestion, ShortAnswerQuestion
 
 logger = logging.getLogger(__name__)
 

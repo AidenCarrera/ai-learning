@@ -36,6 +36,102 @@ class Flashcard(BaseModel):
         }
 
 
+class MultipleChoiceQuestion(BaseModel):
+    """
+    Multiple choice question with 4 options.
+    """
+    question: str
+    options: List[str]  # Must have exactly 4 options
+    correct_answer: str  # Must be one of the options
+    explanation: Optional[str] = None
+    
+    @field_validator('question', 'correct_answer')
+    @classmethod
+    def validate_not_empty(cls, v: str) -> str:
+        """Ensure fields are not empty"""
+        if not v or not v.strip():
+            raise ValueError("Question and answer cannot be empty")
+        return v.strip()
+    
+    @field_validator('options')
+    @classmethod
+    def validate_options(cls, v: List[str]) -> List[str]:
+        """Ensure exactly 4 options"""
+        if len(v) != 4:
+            raise ValueError("Must have exactly 4 options")
+        if any(not opt.strip() for opt in v):
+            raise ValueError("Options cannot be empty")
+        return [opt.strip() for opt in v]
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "question": "What is the primary function of chloroplasts?",
+                "options": [
+                    "Photosynthesis",
+                    "Cellular respiration",
+                    "Protein synthesis",
+                    "DNA replication"
+                ],
+                "correct_answer": "Photosynthesis",
+                "explanation": "Chloroplasts contain chlorophyll and are responsible for photosynthesis"
+            }
+        }
+
+
+class TrueFalseQuestion(BaseModel):
+    """
+    True/False question.
+    """
+    question: str
+    correct_answer: bool
+    explanation: Optional[str] = None
+    
+    @field_validator('question')
+    @classmethod
+    def validate_not_empty(cls, v: str) -> str:
+        """Ensure question is not empty"""
+        if not v or not v.strip():
+            raise ValueError("Question cannot be empty")
+        return v.strip()
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "question": "Photosynthesis only occurs during daytime.",
+                "correct_answer": True,
+                "explanation": "Photosynthesis requires sunlight, so it only occurs during the day"
+            }
+        }
+
+
+class ShortAnswerQuestion(BaseModel):
+    """
+    Short answer question.
+    """
+    question: str
+    correct_answer: str
+    acceptable_answers: Optional[List[str]] = None  # Alternative correct answers
+    explanation: Optional[str] = None
+    
+    @field_validator('question', 'correct_answer')
+    @classmethod
+    def validate_not_empty(cls, v: str) -> str:
+        """Ensure fields are not empty"""
+        if not v or not v.strip():
+            raise ValueError("Question and answer cannot be empty")
+        return v.strip()
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "question": "What organelle is responsible for photosynthesis?",
+                "correct_answer": "chloroplast",
+                "acceptable_answers": ["chloroplasts", "the chloroplast"],
+                "explanation": "Chloroplasts contain the pigment chlorophyll"
+            }
+        }
+
 # ---- Request Models ----
 
 class GenerateRequest(BaseModel):
@@ -161,6 +257,64 @@ class GenerateResponse(BaseModel):
             }
         }
 
+class QuizResponse(BaseModel):
+    """
+    Response from quiz generation.
+    Contains multiple choice questions.
+    """
+    questions: List[MultipleChoiceQuestion]
+    summary: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "questions": [
+                    {
+                        "question": "What is the primary function of chloroplasts?",
+                        "options": ["Photosynthesis", "Respiration", "Synthesis", "Replication"],
+                        "correct_answer": "Photosynthesis"
+                    }
+                ],
+                "summary": "Generated 1 quiz question from 150 characters of text"
+            }
+        }
+
+
+class TestResponse(BaseModel):
+    """
+    Response from test generation.
+    Contains mixed question types: multiple choice, true/false, and short answer.
+    """
+    multiple_choice: List[MultipleChoiceQuestion]
+    true_false: List[TrueFalseQuestion]
+    short_answer: List[ShortAnswerQuestion]
+    summary: str
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "multiple_choice": [
+                    {
+                        "question": "What is the primary function of chloroplasts?",
+                        "options": ["Photosynthesis", "Respiration", "Synthesis", "Replication"],
+                        "correct_answer": "Photosynthesis"
+                    }
+                ],
+                "true_false": [
+                    {
+                        "question": "Photosynthesis only occurs during daytime.",
+                        "correct_answer": True
+                    }
+                ],
+                "short_answer": [
+                    {
+                        "question": "What organelle is responsible for photosynthesis?",
+                        "correct_answer": "chloroplast"
+                    }
+                ],
+                "summary": "Generated test with 3 question types from 150 characters of text"
+            }
+        }
 
 class HealthResponse(BaseModel):
     """
