@@ -3,15 +3,22 @@ load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, field_validator
-from typing import Literal, Optional, List
+from typing import Optional
 import json
 import re
 import logging
 
 from ollama import Client
-from utils import chunk_text, process_pdf_content
+from utils.text_utils import chunk_text, process_pdf_content
 from config import settings, print_config_summary
+from models import (
+    Flashcard,
+    GenerateRequest,
+    UploadResponse,
+    GenerateResponse,
+    HealthResponse,
+    FileInfo
+)
 
 # ---- Logging Configuration ----
 logging.basicConfig(
@@ -35,74 +42,21 @@ app.add_middleware(
     allow_headers=settings.CORS_HEADERS,
 )
 
-# ---- Pydantic Models ----
-class Flashcard(BaseModel):
-    """Single flashcard with question and answer"""
-    question: str
-    answer: str
-    
-    @field_validator('question', 'answer')
-    def validate_not_empty(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Question and answer cannot be empty")
-        return v.strip()
 
+# ---- API Endpoints ----
 
-class GenerateRequest(BaseModel):
-    """Request model for flashcard generation"""
-    text: str
-    mode: Literal["flashcards", "quiz", "test"]
-    num_cards: Optional[int] = settings.DEFAULT_FLASHCARD_COUNT
-    
-    @field_validator('text')
-    def validate_text(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Text cannot be empty")
-        if len(v) > settings.MAX_TEXT_LENGTH:
-            raise ValueError(f"Text too large. Maximum size is {settings.MAX_TEXT_LENGTH} characters (~500KB)")
-        return v.strip()
-    
-    @field_validator('num_cards')
-    def validate_num_cards(cls, v):
-        if v is not None and (v < settings.MIN_FLASHCARD_COUNT or v > settings.MAX_FLASHCARD_COUNT):
-            raise ValueError(f"Number of cards must be between {settings.MIN_FLASHCARD_COUNT} and {settings.MAX_FLASHCARD_COUNT}")
-        return v
-
-
-class UploadResponse(BaseModel):
-    """Response model for upload endpoint"""
-    extracted_text: str
-    chunks: List[str]
-    file_info: Optional[dict] = None
-
-
-class GenerateResponse(BaseModel):
-    """Response model for generate endpoint"""
-    flashcards: List[Flashcard]
-    summary: str
-
-
-class HealthResponse(BaseModel):
-    """Health check response"""
-    status: str
-    version: str
-    ollama_configured: bool
-
-
-# ---- Health Check Endpoint ----
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """
     Check if the API is running and properly configured.
     """
-    return {
-        "status": "healthy",
-        "version": settings.API_VERSION,
-        "ollama_configured": bool(settings.OLLAMA_API_KEY)
-    }
+    return HealthResponse(
+        status="healthy",
+        version=settings.API_VERSION,
+        ollama_configured=bool(settings.OLLAMA_API_KEY)
+    )
 
 
-# ---- Upload Endpoint ----
 @app.post("/upload", response_model=UploadResponse)
 async def upload(
     file: Optional[UploadFile] = File(default=None),
@@ -178,12 +132,12 @@ async def upload(
                 detail="No text could be extracted from the PDF. The file might be image-based or corrupted."
             )
         
-        file_info = {
-            "filename": file.filename,
-            "size_bytes": len(content),
-            "extracted_chars": len(extracted_text),
-            "processed": True
-        }
+        file_info = FileInfo(
+            filename=file.filename,
+            size_bytes=len(content),
+            extracted_chars=len(extracted_text),
+            processed=True
+        )
     else:
         # Use provided text
         extracted_text = text.strip()
@@ -197,7 +151,7 @@ async def upload(
     
     # Chunk the text
     try:
-        chunks = chunk_text(extracted_text, max_chars=settings.CHUNK_SIZE_CHARS)
+        chunks = chunk_text(extracted_text)
         logger.info(f"Text split into {len(chunks)} chunks")
     except Exception as e:
         logger.error(f"Text chunking failed: {str(e)}")
@@ -206,14 +160,13 @@ async def upload(
             detail="Failed to process text. Please try again."
         )
     
-    return {
-        "extracted_text": extracted_text,
-        "chunks": chunks,
-        "file_info": file_info
-    }
+    return UploadResponse(
+        extracted_text=extracted_text,
+        chunks=chunks,
+        file_info=file_info
+    )
 
 
-# ---- Generate Endpoint ----
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(req: GenerateRequest):
     """
@@ -236,10 +189,7 @@ async def generate(req: GenerateRequest):
     
     # Generate flashcards
     try:
-        flashcards = generate_flashcards_with_ollama(
-            req.text,
-            num_cards=req.num_cards or settings.DEFAULT_FLASHCARD_COUNT
-        )
+        flashcards = generate_flashcards_with_ollama(req.text, num_cards=req.num_cards)
         logger.info(f"Successfully generated {len(flashcards)} flashcards")
     except ValueError as e:
         logger.error(f"Flashcard generation failed: {str(e)}")
@@ -254,14 +204,16 @@ async def generate(req: GenerateRequest):
             detail="An error occurred while generating flashcards. Please try again."
         )
     
-    return {
-        "flashcards": flashcards,
-        "summary": f"Generated {len(flashcards)} flashcards from {len(req.text)} characters of text"
-    }
+    return GenerateResponse(
+        flashcards=flashcards,
+        summary=f"Generated {len(flashcards)} flashcards from {len(req.text)} characters of text"
+    )
 
 
 # ---- Ollama Integration ----
-def generate_flashcards_with_ollama(text: str, num_cards: int = None) -> List[Flashcard]:
+# TODO: Move to services/llm_service.py
+
+def generate_flashcards_with_ollama(text: str, num_cards: int = None) -> list[Flashcard]:
     """
     Generate flashcards using Ollama cloud API.
     
@@ -316,7 +268,7 @@ Text to analyze:
         # Parse response
         flashcards = parse_flashcard_response(response_text)
         
-        # Validate we got the requested number (or close to it)
+        # Validate we got flashcards
         if len(flashcards) == 0:
             raise ValueError("No flashcards were generated. The AI response was empty or invalid.")
         
@@ -329,7 +281,7 @@ Text to analyze:
         raise ValueError(f"Flashcard generation failed: {str(e)}")
 
 
-def parse_flashcard_response(response_text: str) -> List[Flashcard]:
+def parse_flashcard_response(response_text: str) -> list[Flashcard]:
     """
     Parse Ollama response into validated Flashcard objects.
     Handles responses with or without markdown code blocks.
@@ -348,7 +300,6 @@ def parse_flashcard_response(response_text: str) -> List[Flashcard]:
     cleaned_text = cleaned_text.replace('```', '').strip()
     
     # Try to find JSON array in the response
-    # Look for pattern like [{...}, {...}]
     json_match = re.search(r'\[\s*\{.*?\}\s*\]', cleaned_text, re.DOTALL)
     if json_match:
         cleaned_text = json_match.group(0)
@@ -362,7 +313,6 @@ def parse_flashcard_response(response_text: str) -> List[Flashcard]:
     
     # Handle different response structures
     if isinstance(data, dict):
-        # Response might be {"flashcards": [...]}
         if "flashcards" in data:
             data = data["flashcards"]
         else:
@@ -379,7 +329,6 @@ def parse_flashcard_response(response_text: str) -> List[Flashcard]:
                 logger.warning(f"Skipping invalid flashcard at index {i}: not a dict")
                 continue
                 
-            # Extract question and answer with fallbacks
             question = item.get("question", "").strip()
             answer = item.get("answer", "").strip()
             
