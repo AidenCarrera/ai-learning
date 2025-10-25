@@ -26,3 +26,6 @@ body {
 }
 
 /* Card animations are now handled by Framer Motion */
+.perspective-1000 {
+  perspective: 1000px;
+}
