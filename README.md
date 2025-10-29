@@ -1,15 +1,49 @@
-# AI-Learning (Minimal Full-Stack Starter)
+# AI-Learning
 
-A minimal working full-stack project that converts PDFs or text into mock flashcards, quizzes, and short tests.
+A full-stack web application that helps users generate and study flashcards using AI.
+Built with Next.js (frontend) and FastAPI (backend), this platform connects to the Ollama API for AI-powered text processing, converting uploaded PDFs or text into structured, study-ready flashcards.
 
-- Frontend: Next.js 15 + TypeScript + TailwindCSS
-- Backend: FastAPI (Python)
+## Purpose
 
-This starter returns mock data only (no real AI). It's meant to be a clean foundation.
+This project was built as a free, open-source alternative to Quizlet. Its made for students who want to create AI-generated flashcards without subscriptions or paywalls.
+The goal is to make studying faster, easier, and more accessible by automating the creation of flashcards.
 
 ## Prerequisites
 - Node.js 18+ and npm
 - Python 3.10+
+- A Ollama API key (remote): set in your .env file as OLLAMA_API_KEY)
+
+## Tech Stack
+
+### Frontend
+- **Framework:** Next.js 15 (with Turbopack)
+- **Language:** TypeScript
+- **Styling:** TailwindCSS v4 + Next Themes (Dark/Light mode)
+- **Animation:** Framer Motion
+- **Icons:** Lucide React
+- **Utilities:** UUID for unique flashcard IDs
+- **Linting & Tooling:** ESLint, TypeScript, PostCSS
+
+### Backend
+- **Framework:** FastAPI
+- **Server:** Uvicorn
+- **Text Parsing:** PyMuPDF for PDF extraction
+- **AI Integration:** Ollama API (remote, not local)
+- **Cross-Origin Handling:** FastAPI CORS middleware
+
+### Dev Environment
+- **Frontend Start:** `npm run dev` (Next.js Turbopack)
+- **Backend Start:** `uvicorn main:app --reload`
+- **IDE:** Recommended: VS Code with Python + ESLint extensions
+
+## Features
+- **AI-Powered Flashcard Generation** — Automatically creates flashcards from PDFs or text using AI.
+- **PDF Parsing** — Extracts text from PDFs with PyMuPDF.
+- **Editable Flashcards** — Add, remove, or modify cards directly in the UI.
+- **Fast, Interactive UI** — Smooth animations and transitions with Framer Motion.
+- **Dark / Light Mode** — Persistent theme selection powered by Next Themes.
+- **Seamless API Communication** — REST integration between FastAPI and Next.js.
+- **Modular Architecture** — Reusable React components built for scalability.
 
 ## Backend (FastAPI)
 
@@ -24,10 +58,10 @@ python -m venv venv
 venv\Scripts\activate.bat
 ```
 
-2. Install dependencies (FastAPI + Uvicorn):
+2. Install dependencies from requirements.txt:
 
 ```bash
-pip install fastapi uvicorn
+pip install -r requirements.txt
 ```
 
 3. Run the server:
@@ -40,8 +74,9 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - CORS is enabled for `http://localhost:3000`.
 
 ### Endpoints
-- `POST /upload` — accepts form-data with `file` (PDF) and/or `text` (string). Returns mock extracted text and chunks.
-- `POST /generate` — JSON body `{ text: string, mode: "flashcards"|"quiz"|"test" }`. Returns mock structured JSON.
+- GET /health — Returns API health status, version, and whether the Ollama API key is configured.
+- POST /upload — Accepts form-data with file (PDF) or text (string). Extracts text and splits it into chunks using PyMuPDF.
+- POST /generate — Accepts JSON { "text": string, "mode": "flashcards", "num_cards": number }. Uses the Ollama API to generate flashcards from the given text. *(Currently only the "flashcards" mode is implemented.)*
 
 ## Frontend (Next.js)
 
@@ -55,19 +90,23 @@ npm run dev
 
 - App: `http://localhost:3000`
 
-The home page lets you upload a PDF or paste text, choose a mode, and generate mock results, styled minimally with Tailwind.
+## How to use
 
-## Project Structure
+- Upload: Drag and drop a PDF or paste text directly into the upload section.
+- Mode Selection: Choose between Flashcards, Quiz, or Test generation.
+- Generate: Click Generate to send your content to the backend for AI processing.
+- View Results: Instantly see generated flashcards or questions in the viewer.
+- Edit Flashcards: Modify or delete any generated card directly in the browser.
+- Save Sets: Organize and store flashcard sets locally for later review.
+- Theme Toggle: Switch between light and dark mode for comfortable viewing.
+- Navigation: Use the sidebar to move between Generate, Library, and future tools.
 
-```
-backend/
-  main.py           # FastAPI app with /upload and /generate
-  utils.py          # placeholder chunk_text()
-frontend/
-  src/app/page.tsx  # UI for upload, mode select, rendering results
-  src/types/api.ts  # TypeScript interfaces for API responses
-```
+## Future Improvements
 
-## Notes
-- PDF parsing is mocked. The backend only measures uploaded file size and returns a fake extracted string.
-- You can extend `backend/utils.py` and the `/generate` handler to integrate real chunking and LLMs later.
+- User authentication and cloud-based flashcard saving
+- Export/import flashcard sets (JSON, CSV, Anki)
+- Multiple document uploads and batch processing
+- Learning statistics and spaced repetition tracking
+- Enhanced error handling and backend optimization
+- Mobile UI and touch-screen performance improvements
+- Multi-language support for international users
