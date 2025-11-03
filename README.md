@@ -1,4 +1,4 @@
-# AI-Learning
+# Open Deck
 
 A full-stack web application that helps users generate and study flashcards using AI.
 Built with Next.js (frontend) and FastAPI (backend), this platform connects to the Ollama API for AI-powered text processing, converting uploaded PDFs or text into structured, study-ready flashcards.
